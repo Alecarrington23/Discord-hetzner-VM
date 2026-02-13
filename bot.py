@@ -3,15 +3,11 @@ import asyncio
 import sqlite3
 from dataclasses import dataclass
 from typing import Optional, Dict, List, Tuple
-
 from dotenv import load_dotenv
-
 import discord
 from discord import app_commands
 from discord.ext import commands
-
 from hcloud import Client
-
 
 load_dotenv()
 
@@ -21,10 +17,8 @@ if not DISCORD_TOKEN or not HCLOUD_TOKEN:
     raise RuntimeError("Missing DISCORD_TOKEN or HCLOUD_TOKEN in env")
 
 hc = Client(token=HCLOUD_TOKEN)
-
 DEFAULT_SERVER_TYPE = "cx23"
 DB_PATH = "servers.db"
-
 
 def db_init() -> None:
     with sqlite3.connect(DB_PATH) as con:
@@ -51,7 +45,6 @@ def db_init() -> None:
         )
         con.commit()
 
-
 def db_add_server(discord_user_id: int, server_id: int, server_name: str) -> None:
     with sqlite3.connect(DB_PATH) as con:
         cur = con.cursor()
@@ -60,7 +53,6 @@ def db_add_server(discord_user_id: int, server_id: int, server_name: str) -> Non
             (str(discord_user_id), int(server_id), server_name),
         )
         con.commit()
-
 
 def db_find_server(discord_user_id: int, query: str) -> Optional[int]:
     q = (query or "").strip()
@@ -81,7 +73,6 @@ def db_find_server(discord_user_id: int, query: str) -> Optional[int]:
         row = cur.fetchone()
         return row[0] if row else None
 
-
 def db_get_defaults(discord_user_id: int) -> Tuple[Optional[int], Optional[int], Optional[int]]:
     with sqlite3.connect(DB_PATH) as con:
         cur = con.cursor()
@@ -93,7 +84,6 @@ def db_get_defaults(discord_user_id: int) -> Tuple[Optional[int], Optional[int],
         if not row:
             return None, None, None
         return row[0], row[1], row[2]
-
 
 def db_set_defaults(
     discord_user_id: int,
@@ -109,7 +99,6 @@ def db_set_defaults(
         )
         con.commit()
 
-
 @dataclass
 class HetznerCache:
     locations: Dict[str, object]
@@ -120,21 +109,17 @@ class HetznerCache:
     ssh_keys: Dict[int, object]
     firewalls: Dict[int, object]
 
-
 HCACHE: Optional[HetznerCache] = None
 AUTO_IMAGES_X86: List[str] = []
 AUTO_LOCATIONS: List[str] = []
-
 
 def _img_arch(img: object) -> str:
     arch = getattr(img, "architecture", None)
     return str(arch).lower() if arch is not None else "unknown"
 
-
 def _is_x86_arch(arch: str) -> bool:
     a = (arch or "").lower()
     return ("x86" in a) or ("amd64" in a) or ("x86_64" in a)
-
 
 def build_cache() -> HetznerCache:
     locations = {l.name: l for l in hc.locations.get_all()}
@@ -147,7 +132,6 @@ def build_cache() -> HetznerCache:
     networks = {n.id: n for n in hc.networks.get_all()}
     ssh_keys = {k.id: k for k in hc.ssh_keys.get_all()}
     firewalls = {f.id: f for f in hc.firewalls.get_all()}
-
     return HetznerCache(
         locations=locations,
         server_types=server_types,
@@ -158,20 +142,17 @@ def build_cache() -> HetznerCache:
         firewalls=firewalls,
     )
 
-
 def cache_required() -> HetznerCache:
     global HCACHE
     if HCACHE is None:
         HCACHE = build_cache()
     return HCACHE
 
-
 def _top(items: List[str], n: int = 50) -> str:
     head = "\n".join(items[:n])
     if len(items) <= n:
         return head
     return head + f"\n… (+{len(items) - n} more)"
-
 
 def pick_single_or_user_default(kind: str, items_by_id: Dict[int, object], user_default_id: Optional[int]) -> object:
     if not items_by_id:
@@ -195,7 +176,6 @@ def pick_single_or_user_default(kind: str, items_by_id: Dict[int, object], user_
         f"Use /setdefaults to choose IDs.\n\n"
         f"Available {kind}s:\n" + "\n".join(lines)
     )
-
 
 def cloud_init_for_app(app: str) -> str:
     app = (app or "").strip().lower()
@@ -228,7 +208,6 @@ def cloud_init_for_app(app: str) -> str:
 
     raise RuntimeError(f'Unknown app "{app}". Supported: none, coolify, wireguard')
 
-
 def server_embed(server) -> discord.Embed:
     public_net = getattr(server, "public_net", None)
     ipv4 = public_net.ipv4.ip if public_net and getattr(public_net, "ipv4", None) else "N/A"
@@ -250,18 +229,15 @@ def server_embed(server) -> discord.Embed:
     embed.set_footer(text="Hetzner Provisioner")
     return embed
 
-
 def suggest_locations_text() -> str:
     c = cache_required()
     names = sorted(c.locations.keys())
     return "Try a different location. Available (first 25): " + ", ".join(names[:25]) + (" …" if len(names) > 25 else "")
 
-
 def suggest_x86_images_text() -> str:
     c = cache_required()
     names = sorted(c.images_x86.keys())
     return "Valid x86 images (first 25): " + ", ".join(names[:25]) + (" …" if len(names) > 25 else "")
-
 
 def create_server(discord_user_id: int, name: str, location_name: str, image_name: str, app: str) -> object:
     c = cache_required()
@@ -291,12 +267,10 @@ def create_server(discord_user_id: int, name: str, location_name: str, image_nam
         )
 
     user_data = cloud_init_for_app(app)
-
     net_id, ssh_id, fw_id = db_get_defaults(discord_user_id)
     net = pick_single_or_user_default("network", c.networks, net_id)
     ssh_key = pick_single_or_user_default("SSH key", c.ssh_keys, ssh_id)
     firewall = pick_single_or_user_default("firewall", c.firewalls, fw_id)
-
     resp = hc.servers.create(
         name=name,
         server_type=st,
@@ -314,15 +288,12 @@ def create_server(discord_user_id: int, name: str, location_name: str, image_nam
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-
 def is_dm(interaction: discord.Interaction) -> bool:
     return interaction.guild is None
-
 
 def _is_resource_limit_error(e: Exception) -> bool:
     s = str(e).lower()
     return ("resource_limit_exceeded" in s) or ("server limit reached" in s) or ("limit reached" in s)
-
 
 def _server_quota_remaining() -> Optional[int]:
     try:
@@ -341,7 +312,6 @@ def _server_quota_remaining() -> Optional[int]:
     except Exception:
         return None
 
-
 async def safe_reply(
     interaction: discord.Interaction,
     content: Optional[str] = None,
@@ -355,7 +325,6 @@ async def safe_reply(
         await interaction.followup.send(content=content, embed=embed, ephemeral=ephemeral)
     else:
         await interaction.response.send_message(content=content, embed=embed, ephemeral=ephemeral)
-
 
 async def send_long(interaction: discord.Interaction, text: str, ephemeral: bool = True) -> None:
     if text is None:
@@ -380,7 +349,6 @@ async def send_long(interaction: discord.Interaction, text: str, ephemeral: bool
         else:
             await interaction.followup.send(chunk, ephemeral=ep)
 
-
 async def image_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     try:
         cur = (current or "").lower().strip()
@@ -394,7 +362,6 @@ async def image_autocomplete(interaction: discord.Interaction, current: str) -> 
         print("image_autocomplete error:", repr(e))
         return []
 
-
 async def location_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     try:
         cur = (current or "").lower().strip()
@@ -407,7 +374,6 @@ async def location_autocomplete(interaction: discord.Interaction, current: str) 
     except Exception as e:
         print("location_autocomplete error:", repr(e))
         return []
-
 
 @bot.event
 async def on_ready():
@@ -426,7 +392,6 @@ async def on_ready():
 
     print(f"Logged in as {bot.user}")
 
-
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     try:
@@ -438,7 +403,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     except Exception:
         pass
     raise error
-
 
 @bot.tree.command(name="create", description="Create a Hetzner VM (required: name, location, image)")
 @app_commands.describe(
@@ -541,7 +505,6 @@ async def create_cmd(
         for extra in embeds[i + 1 : i + 10]:
             await interaction.followup.send(embed=extra, ephemeral=(not is_dm(interaction)))
 
-
 @bot.tree.command(name="s", description="Get info about one of your servers (by name or ID)")
 @app_commands.describe(server="Server name or ID")
 async def s_cmd(interaction: discord.Interaction, server: str):
@@ -557,7 +520,6 @@ async def s_cmd(interaction: discord.Interaction, server: str):
         return
 
     await safe_reply(interaction, embed=server_embed(srv), ephemeral=True)
-
 
 @bot.tree.command(name="refresh", description="Refresh Hetzner options cache")
 async def refresh_cmd(interaction: discord.Interaction):
@@ -587,14 +549,12 @@ async def refresh_cmd(interaction: discord.Interaction):
         ephemeral=True,
     )
 
-
 @bot.tree.command(name="images", description="List ALL valid x86 image names (compatible with cx23)")
 async def images_cmd(interaction: discord.Interaction):
     c = cache_required()
     names = sorted(c.images_x86.keys())
     text = "x86 Images:\n" + _top(names, n=len(names))
     await send_long(interaction, text, ephemeral=True)
-
 
 @bot.tree.command(name="locations", description="List available Hetzner locations")
 async def locations_cmd(interaction: discord.Interaction):
@@ -603,14 +563,12 @@ async def locations_cmd(interaction: discord.Interaction):
     text = "Locations:\n" + _top(names, n=min(len(names), 200))
     await send_long(interaction, text, ephemeral=True)
 
-
 @bot.tree.command(name="networks", description="List networks discovered from Hetzner")
 async def networks_cmd(interaction: discord.Interaction):
     c = cache_required()
     lines = sorted([f"- {n.name} (id {n.id})" for n in c.networks.values()])
     text = "Networks:\n" + ("\n".join(lines) if lines else "None")
     await send_long(interaction, text, ephemeral=True)
-
 
 @bot.tree.command(name="sshkeys", description="List SSH keys discovered from Hetzner")
 async def sshkeys_cmd(interaction: discord.Interaction):
@@ -619,14 +577,12 @@ async def sshkeys_cmd(interaction: discord.Interaction):
     text = "SSH keys:\n" + ("\n".join(lines) if lines else "None")
     await send_long(interaction, text, ephemeral=True)
 
-
 @bot.tree.command(name="firewalls", description="List firewalls discovered from Hetzner")
 async def firewalls_cmd(interaction: discord.Interaction):
     c = cache_required()
     lines = sorted([f"- {f.name} (id {f.id})" for f in c.firewalls.values()])
     text = "Firewalls:\n" + ("\n".join(lines) if lines else "None")
     await send_long(interaction, text, ephemeral=True)
-
 
 @bot.tree.command(
     name="setdefaults",
@@ -666,6 +622,4 @@ async def setdefaults_cmd(
         ),
         ephemeral=True,
     )
-
-
 bot.run(DISCORD_TOKEN)
